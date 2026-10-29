@@ -1,0 +1,17 @@
+{
+  "chrome_user_data_dir": "C:\\Users\\Navroz\\AppData\\Local\\Google\\Chrome\\User Data",
+  "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "vpncmd_path": "C:\\Program Files\\SoftEther VPN Client\\vpncmd.exe",
+  "debug_port": 9222,
+  "stores": {
+    "AMH": {"ip": "192.3.183.107", "chrome_profile": "Profile 15", "vpn": "AMH"},
+    "TSS": {"ip": "204.188.208.166", "chrome_profile": "Profile 17", "vpn": "TSS"},
+    "MMS": {"ip": "198.23.208.141", "chrome_profile": "Profile 18", "vpn": "MMS"},
+    "MZM": {"ip": "", "chrome_profile": "Profile 19", "vpn": "MZM"},
+    "GGL": {"ip": "", "chrome_profile": "Profile 20", "vpn": "GGL"},
+    "GG": {"ip": "", "chrome_profile": "Profile 21", "vpn": "GG"},
+    "IQ": {"ip": "204.44.93.167", "chrome_profile": "Profile 29", "vpn": "IQ"},
+    "IQR": {"ip": "204.44.93.167", "chrome_profile": "Profile 29", "vpn": "IQ"},
+    "SSL": {"ip": "107.161.123.246", "chrome_profile": "Profile 36", "vpn": "SSL"}
+  }
+}

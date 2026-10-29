@@ -1,0 +1,14 @@
+.env
+.venv/
+chrome_debug_data/
+chrome_aliexpress/
+output/
+__pycache__/
+*.log
+*.pyc
+*.xlsx
+*.xls
+*.csv
+*.png
+*.jpg
+*.jpeg
