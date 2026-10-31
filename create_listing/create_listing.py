@@ -544,9 +544,8 @@ def chrome_tabs(port: int) -> list[dict]:
 
 
 def let_user_finish_login(chrome: Path, user_data: Path, profile: str, port: int) -> None:
-    close_chrome()
-    launch_for_user(chrome, user_data, profile, SELL_URL, port)
-    log.warning("Chrome is open without automation. If Are you human stays on Verifying, click the Cloudflare box. The listing starts when Product Info is open.")
+    del chrome, user_data, profile
+    log.warning("Solve the check in the Chrome window that is already open. The tabs will stay open for %s seconds.", SIGN_IN_TIMEOUT)
     deadline = time.time() + SIGN_IN_TIMEOUT
     last = ""
     while time.time() < deadline:
@@ -563,7 +562,7 @@ def let_user_finish_login(chrome: Path, user_data: Path, profile: str, port: int
                 log.info("Listing form is open. Starting the listing.")
                 return
         time.sleep(2)
-    raise RuntimeError("Listing form did not open. Finish the Are you human check and run the script again.")
+    raise RuntimeError("Captcha was not solved in time. Chrome was left open.")
 
 
 def start_chrome(chrome: Path, user_data: Path, profile: str, port: int) -> subprocess.Popen:
@@ -847,11 +846,33 @@ def human_check_visible(driver: WebDriver) -> bool:
     return bool(re.search(r"are you human|i'm not a robot|i’m not a robot", body, re.I))
 
 
+def challenge_visible(driver: WebDriver) -> bool:
+    if human_check_visible(driver) or cloudflare_widget(driver):
+        return True
+    try:
+        shown = f"{driver.title or ''} {driver.current_url or ''}"
+    except Exception:
+        return False
+    return bool(re.search(r"are you human|just a moment|verifying|challenge", shown, re.I))
+
+
 def wait_for_human_check(driver: WebDriver) -> None:
-    if not human_check_visible(driver):
+    if not challenge_visible(driver):
         return
-    log.warning("Reverb is showing Are you human? Leaving the automated window so the check can finish.")
-    raise RuntimeError("Cloudflare verification failed in the automated window")
+    log.warning(
+        "Captcha is on the screen. Solve it in this Chrome window. The bot will wait %s seconds and will not close the tabs.",
+        SIGN_IN_TIMEOUT,
+    )
+    deadline = time.time() + SIGN_IN_TIMEOUT
+    while time.time() < deadline:
+        time.sleep(2)
+        try:
+            if not challenge_visible(driver):
+                log.info("Captcha is gone. Continuing the listing.")
+                return
+        except Exception:
+            log.info("Chrome is still open. Finish the captcha in that window.")
+    raise RuntimeError("Captcha was not solved in time. Chrome was left open.")
 
 
 def on_auth_page(driver: WebDriver) -> bool:
@@ -888,14 +909,21 @@ def open_sell_form(driver: WebDriver) -> None:
         driver.get(SIGN_IN_URL)
         time.sleep(2)
         click_text(driver, r"^sign in\.?$", timeout=2)
-    if on_auth_page(driver) or cloudflare_widget(driver):
-        raise RuntimeError("Cloudflare verification failed in the automated window")
+        wait_for_human_check(driver)
+    if challenge_visible(driver):
+        wait_for_human_check(driver)
+    if challenge_visible(driver):
+        raise RuntimeError("Captcha was not solved in time. Chrome was left open.")
+    if on_auth_page(driver):
+        raise RuntimeError("Reverb is not signed in")
     if "listings/new" not in (driver.current_url or ""):
         driver.get(SELL_URL)
         time.sleep(3)
         wait_for_human_check(driver)
-        if on_auth_page(driver) or cloudflare_widget(driver):
-            raise RuntimeError("Cloudflare verification failed in the automated window")
+        if challenge_visible(driver):
+            raise RuntimeError("Captcha was not solved in time. Chrome was left open.")
+        if on_auth_page(driver):
+            raise RuntimeError("Reverb is not signed in")
     if "listings/new" not in (driver.current_url or ""):
         click_text(driver, r"from scratch|create a new listing|list an item|sell your gear", timeout=4)
         time.sleep(2)
@@ -1515,36 +1543,45 @@ def process_store(
                 log.info("OK %s", row.sku)
             except Exception as exc:
                 text = str(exc)
-                needs_user = "not signed in" in text or "Cloudflare verification failed" in text
-                if needs_user:
-                    log.warning("Automated window cannot pass Cloudflare. Handing Chrome to you.")
+                if "Captcha was not solved" in text or "Cloudflare" in text:
+                    keep_chrome_open = True
+                    row.status = "FAILED"
+                    row.detail = text
+                    log.error("FAIL %s: %s", row.sku, exc)
+                    log.error("Stopped this store. The Chrome tabs were left open.")
+                    break
+                if "not signed in" in text:
+                    log.warning("Leaving this Chrome window open. Sign in there. The tabs will not be closed.")
+                    keep_chrome_open = True
                     try:
-                        if driver:
-                            driver.quit()
-                    except Exception:
-                        pass
-                    driver = None
-                    let_user_finish_login(chrome, profile_dir, profile, port)
-                    driver = connect_selenium(port)
-                    try:
+                        let_user_finish_login(chrome, profile_dir, profile, port)
                         create_one(driver, row)
                         row.status = "OK"
                         row.detail = "Published" if row.publish else "Saved draft"
                         log.info("OK %s", row.sku)
+                        keep_chrome_open = False
                         continue
                     except Exception as exc2:
                         exc = exc2
+                        text = str(exc)
+                        keep_chrome_open = True
+                        if "Captcha was not solved" in text or "Cloudflare" in text:
+                            row.status = "FAILED"
+                            row.detail = text
+                            log.error("FAIL %s: %s", row.sku, exc)
+                            log.error("Stopped this store. The Chrome tabs were left open.")
+                            break
                 row.status = "FAILED"
                 row.detail = str(exc)
                 log.error("FAIL %s: %s", row.sku, exc)
-                if driver:
+                if driver and not keep_chrome_open:
                     screenshot(driver, f"{store_name}_{row.sku}")
-                if "not signed in" in str(exc) or "Cloudflare" in str(exc):
+                if "not signed in" in str(exc) or "Captcha" in str(exc) or "Cloudflare" in str(exc):
                     keep_chrome_open = True
             time.sleep(ROW_DELAY)
     finally:
         if keep_chrome_open:
-            log.error("Chrome left open. Sign in to Reverb there, then run the script again.")
+            log.error("Chrome left open so you can finish the check. The tabs were not closed.")
         else:
             try:
                 if driver:

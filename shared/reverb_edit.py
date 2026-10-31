@@ -339,20 +339,25 @@ def _click_continue(driver: WebDriver) -> bool:
 
 
 def save_changes(driver: WebDriver) -> None:
-    moved = False
-    for _ in range(6):
-        if _click_continue(driver):
-            moved = True
-            cl.wait_for_human_check(driver)
-            continue
-        if cl.click_button_label(driver, "Save Changes", timeout=1) or cl.click_button_label(driver, "Update", timeout=1):
-            cl.log.info("Clicked Save")
+    """Live to any other status uses Publish Changes. Any other status to Live uses Save Changes."""
+    published = False
+    for _ in range(8):
+        cl.wait_for_human_check(driver)
+        if cl.click_button_label(driver, "Publish Changes", timeout=1):
+            cl.log.info("Clicked Publish Changes")
             time.sleep(2)
-            moved = True
+            published = True
             break
+        if cl.click_button_label(driver, "Save Changes", timeout=1) or cl.click_button_label(driver, "Update", timeout=1):
+            cl.log.info("Clicked Save Changes")
+            time.sleep(2)
+            published = True
+            break
+        if _click_continue(driver):
+            continue
         break
-    if not moved:
-        raise RuntimeError("Could not find Continue after the price update")
+    if not published:
+        raise RuntimeError("Could not find Publish Changes or Save Changes")
     body = cl.page_text(driver)
     if re.search(r"couldn't save|could not save|please fix|there was a problem", body, re.I):
         raise RuntimeError("Save may have failed")
